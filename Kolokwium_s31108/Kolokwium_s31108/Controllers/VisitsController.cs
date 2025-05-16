@@ -1,4 +1,5 @@
 ﻿using Kolokwium_s31108.Exceptions;
+using Kolokwium_s31108.Models.Dtos;
 using Kolokwium_s31108.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,6 +28,33 @@ public class VisitsController : ControllerBase
         catch (NotFoundException e)
         {
             return NotFound(e.Message);
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AddVisitAsync(CreateVisitRequestDto createVisitRequestDto)
+    {
+        if (!createVisitRequestDto.Services.Any())
+        {
+            return BadRequest("At least one item is needed");
+        }
+
+        try
+        {
+            await _dbServices.AddNewVisitAsync(createVisitRequestDto);
+            return Created("", null);
+        }
+        catch (ConflictException e)
+        {
+            return Conflict(e.Message);
+        }
+        catch (NotFoundException e)
+        {
+            return NotFound(e.Message);
+        }
+        catch (Exception e)
+        {
+            return   BadRequest(e.Message);
         }
     }
 }

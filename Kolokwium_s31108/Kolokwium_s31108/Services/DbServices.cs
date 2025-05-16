@@ -1,4 +1,5 @@
-﻿using Kolokwium_s31108.Exceptions;
+﻿using System.Data.Common;
+using Kolokwium_s31108.Exceptions;
 using Kolokwium_s31108.Models.Dtos;
 using Microsoft.Data.SqlClient;
 
@@ -77,4 +78,68 @@ public class DbServices : IDbServices
      }
      return visitDetails;
     }
+
+    public async Task AddNewVisitAsync(CreateVisitRequestDto request)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using SqlCommand command = new SqlCommand();
+        
+        command.Connection = connection;
+        await connection.OpenAsync();
+        
+        
+        DbTransaction? transaction = await connection.BeginTransactionAsync();
+        command.Transaction = transaction as SqlTransaction;
+
+        try
+        {
+            var checkVisitCmd =
+                new SqlCommand("Select 1 FROM visit Where visit_id = @visitId;", connection, command.Transaction);
+            checkVisitCmd.Parameters.AddWithValue("@visitId", request.VisitId);
+            var exists = await checkVisitCmd.ExecuteScalarAsync();
+            if (exists is not null)
+            {
+                throw new ConflictException("Visit already exists");
+            }
+            
+            var checkClientCmd =
+                new SqlCommand("Select 1 from client where client_id = @clientId;", connection, command.Transaction);
+            checkClientCmd.Parameters.AddWithValue("@clientId", request.ClientId);
+            var existsClient = await checkClientCmd.ExecuteScalarAsync();
+            if (existsClient is null)
+            {
+                throw new NotFoundException("Client not found");
+            }
+            /*
+            var checkMechanicCmd =
+                new SqlCommand("Select licence_number from mechanic where licence_number = @licenceNumber;", connection, command.Transaction);
+           checkMechanicCmd.Parameters.AddWithValue("@licenceNumber", request.MechanicLicenceNumber);
+            var existsMechanic = await checkMechanicCmd.ExecuteScalarAsync();
+            if (existsMechanic is null)
+            {
+                throw new NotFoundException("Mechanic not found");
+            }
+*/
+            var insertVisit = new SqlCommand(
+                "Insert Into Visit(visit_id, client_id) VALUes (@visitId, @clientId);)", connection, command.Transaction);
+            insertVisit.Parameters.AddWithValue("@visitId", request.VisitId);
+            insertVisit.Parameters.AddWithValue("@clientId", request.ClientId);
+            await command.ExecuteNonQueryAsync();
+
+            for (int i = 0; i < request.Services.Count; i++)
+            {
+                var insertServicesDetails = new SqlCommand(
+                    "Insert into Service(name) VAlues (@serviceName);", connection, command.Transaction);
+                insertServicesDetails.Parameters.AddWithValue("@serviceName", request.Services[i].ServiceName);
+                await command.ExecuteNonQueryAsync();
+            }
+            await transaction.CommitAsync();
+        }
+        catch (Exception e)
+        {
+            await transaction.RollbackAsync();
+            throw e;
+        }
+    }
+    
 }
